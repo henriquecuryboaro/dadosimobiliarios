@@ -15,4 +15,8 @@ data.iloc[:,6],data.iloc[:,7],data.iloc[:,12] = data.iloc[:,6].str.capitalize(),
 ##tornar primeira letra de cada termo do endereço maiúscula e demais minúsculas
 data.iloc[:,2] = data.iloc[:,2].str.title()
 
-print(data)
+#Manipulação de dados para obtenção de variáveis de interesse
+data['media_metro_quadrado'] = round((data.iloc[:,10]/data.iloc[:,9]),2)
+
+#exemplo de transações em Campo Grande no ano de 2025
+print(data[(data['bairro'] == 'Campo Grande') & (data['ano_transação'] == 2025)])
