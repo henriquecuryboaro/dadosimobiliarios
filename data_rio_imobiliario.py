@@ -86,18 +86,26 @@ def main():
                 fig.update_traces(marker=dict(size=12))
                 st.plotly_chart(fig)
 
+                data_metro_quadrado['variacao_anual'] = '-'
+                for i in range(1,len(data_metro_quadrado)):
+                    data_metro_quadrado.iloc[i,4] = round(100*((data_metro_quadrado.iloc[i,3] - data_metro_quadrado.iloc[i-1,3])/data_metro_quadrado.iloc[i-1,3]),2)
+
                 data_metro_quadrado = data_metro_quadrado.rename(columns={'ano': 'Ano', 
                                                                       'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
                                                                       'media_metro_quadrado_min':'Menor valor de m² (R$/m²)', 
-                                                                      'media_metro_quadrado_mean':'Valor médio de m² (R$/m²)'
+                                                                      'media_metro_quadrado_mean':'Valor médio de m² (R$/m²)',
+                                                                      'variacao_anual':'Variação anual (%)'
                                                                       })
 
+                ultima_obs = len(data_metro_quadrado)-1
+                variacao = round(100*((data_metro_quadrado.iloc[ultima_obs,3] - data_metro_quadrado.iloc[0,3])/data_metro_quadrado.iloc[0,3]),2)
+                st.write(f'### Variação total observada no período para imóveis no bairo para a tipologia escolhida: {variacao}%')
                 st.dataframe(data_metro_quadrado, hide_index=True)
             except ValueError:
-                st.write('**Não há resultados contemplados por esta busca**')
+                st.write('### Não há resultados contemplados por esta busca**')
 
         else:
-            st.write('**Resultados serão exibidos**')        
+            st.write('### Resultados serão exibidos')        
 
     with con1:
         exibicao_bairro(1)
