@@ -2,6 +2,8 @@ import pandas as pd
 from pathlib import Path
 import plotly.express as px
 import streamlit as st
+import sidrapy
+import datetime
 
 #Apontando para arquivo no mesmo diretório do script executado
 DF_PATH = Path(__file__).resolve().parent / 'transacoes_imobiliarias.csv'
@@ -36,83 +38,158 @@ def variacao_metro_bairro(bairro, tipologia):
 
     return data_metro_quadrado
 
+# def maiores_variacoes(tipologia_escolhida):
+# tipologia_escolhida = 'Apartamento'
+
 def main():
-    st.write("""
-	# Painel de informações do mercado imobiliário na cidade do Rio de Janeiro
-	# Dados gerados a partir de transações ocorridas entre 2011 e 2025
-	""")
+    st.write('# Painel de informações do mercado imobiliário na cidade do Rio de Janeiro')
     
     st.sidebar.title('Menu de navegação')
-    st.sidebar.selectbox('Esolha a página',sorted(['Página 1', 'Página 2']), index=None, placeholder=' ')
+    pagina = st.sidebar.selectbox('Esolha a página',['Início','Evolução de transações em bairros', 'Comparação de indicadores'])
     
-    col1,col2 = st.columns(2)
-    con1 = col1.container(key='comp_1')
-    con2 = col2.container(key='comp_2')
+    if pagina == 'Início':
+        st.write('# Esta é a página inicial')
+
+    if pagina == 'Evolução de transações em bairros':
+
+        st.write('### Registros de negociações de imóveis ocorridas entre 2011 e 2011 no município')
+        st.write('### Fonte dos dados - Portal Data.Rio')
+
+        col1,col2 = st.columns(2)
+        con1 = col1.container(key='comp_1')
+        con2 = col2.container(key='comp_2')
+        
+        def exibicao_bairro(i):
+            st.markdown("""
+                        <style>
+                        /* Targets the text within the selectbox itself */
+                        .stSelectbox > div[data-baseweb="select"] > div {
+                            font-size: 20px; 
+                        }
+                        /* Targets the options in the dropdown menu */
+                        div[data-baseweb="popover"] div[role="listbox"] div p {
+                            font-size: 18px !important;
+                        }
+                        /* Targets the label of the selectbox */
+                        .stSelectbox > label p {
+                            font-size: 22px !important;
+                            font-weight: bold;
+                        }
+                        </style>
+                        """, unsafe_allow_html=True)
+
+            bairro_escolhido = st.selectbox('Escolha o bairro',sorted(data['bairro'].unique()), index=None, placeholder='Bairro', key=f'bairro{i}')
+            tipologia_escolhida = st.selectbox('Escolha a tipologia',sorted(data['principais_tipologias'].unique()), index=None, placeholder='Tipologia', disabled=bairro_escolhido is None, key=f'tipo{i}')
+
+            if (bairro_escolhido is not None) and (tipologia_escolhida is not None):
+                data_metro_quadrado = variacao_metro_bairro(bairro_escolhido, tipologia_escolhida)
+
+                try:
+                    fig = px.scatter(x=data_metro_quadrado['ano'],y=data_metro_quadrado['media_metro_quadrado_mean'],
+                            title=f'Evolução do valor do metro quadro em imóveis do bairro: {bairro_escolhido} <br> Tipologia: {tipologia_escolhida}',
+                        )
+                    fig.update_layout(
+                        title_x=0.5,           # Define a posição X como 0.5 (centro)
+                        title_xanchor='center', # Garante que o centro do título fique no ponto 0.5
+                        title_font_size=24
+                    )
+                    fig.update_traces(marker=dict(size=12))
+                    st.plotly_chart(fig)
+
+                    data_metro_quadrado['variacao_anual'] = '-'
+                    for i in range(1,len(data_metro_quadrado)):
+                        data_metro_quadrado.iloc[i,4] = round(100*((data_metro_quadrado.iloc[i,3] - data_metro_quadrado.iloc[i-1,3])/data_metro_quadrado.iloc[i-1,3]),2)
+
+                    data_metro_quadrado = data_metro_quadrado.rename(columns={'ano': 'Ano', 
+                                                                        'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
+                                                                        'media_metro_quadrado_min':'Menor valor de m² (R$/m²)', 
+                                                                        'media_metro_quadrado_mean':'Valor médio de m² (R$/m²)',
+                                                                        'variacao_anual':'Variação anual (%)'
+                                                                        })
+
+                    ultima_obs = len(data_metro_quadrado)-1
+                    variacao = round(100*((data_metro_quadrado.iloc[ultima_obs,3] - data_metro_quadrado.iloc[0,3])/data_metro_quadrado.iloc[0,3]),2)
+                    st.write(f'### Variação total observada no período para imóveis no bairo para a tipologia escolhida: {variacao}%')
+                    st.dataframe(data_metro_quadrado, hide_index=True)
+                except ValueError:
+                    st.write('### Não há resultados contemplados por esta busca')
+
+            else:
+                st.write('### Selecione as opções acima')        
+
+        with con1:
+            exibicao_bairro(1)
+
+        with con2:
+            exibicao_bairro(2)
     
-    def exibicao_bairro(i):
-        st.markdown("""
-                    <style>
-                    /* Targets the text within the selectbox itself */
-                    .stSelectbox > div[data-baseweb="select"] > div {
-                        font-size: 20px; 
-                    }
-                    /* Targets the options in the dropdown menu */
-                    div[data-baseweb="popover"] div[role="listbox"] div p {
-                        font-size: 18px !important;
-                    }
-                    /* Targets the label of the selectbox */
-                    .stSelectbox > label p {
-                        font-size: 22px !important;
-                        font-weight: bold;
-                    }
-                    </style>
-                    """, unsafe_allow_html=True)
+    if pagina == 'Comparação de indicadores':
+        
+        def ipca_acumulado(inicio,fim):
 
-        bairro_escolhido = st.selectbox('Escolha o bairro',sorted(data['bairro'].unique()), index=None, placeholder='Bairro', key=f'bairro{i}')
-        tipologia_escolhida = st.selectbox('Escolha a tipologia',sorted(data['principais_tipologias'].unique()), index=None, placeholder='Tipologia', disabled=bairro_escolhido is None, key=f'tipo{i}')
+            inicio = str(inicio)[0:4]+str(inicio)[5:7]
+            fim = str(fim)[0:4]+str(fim)[5:7]
 
-        if (bairro_escolhido is not None) and (tipologia_escolhida is not None):
-            data_metro_quadrado = variacao_metro_bairro(bairro_escolhido, tipologia_escolhida)
+            # monta o período no formato exigido pelo SIDRA
+            period = f'{inicio}-{fim}'
+            
+
+            ipca = sidrapy.get_table(
+                table_code='1737',
+                territorial_level='1',     # Brasil
+                ibge_territorial_code='1',
+                variable='63',             # Variação mensal
+                period=period,
+                header='n'
+            )
+
+            df_ipca = pd.DataFrame(ipca)
+
+            df_ipca['V'] = df_ipca['V'].astype(float)
+            df_ipca['decimal'] = (df_ipca['V'])/100
+            ipca_acumulado_periodo = 1
+
+            for i in range(len(df_ipca)):
+                ipca_acumulado_periodo = ipca_acumulado_periodo*(1+(df_ipca.iloc[i,11]))
+
+            return (ipca_acumulado_periodo-1)
+
+        col3,col4 = st.columns(2)
+        con3 = col3.container(key='comp_3')
+        con4 = col4.container(key='comp_4')
+
+        with con3:
+
+            inicio = st.date_input('### Início da série', min_value=datetime.date(1900, 1, 1), max_value=None)
+            fim = st.date_input('### Fim da série', min_value=datetime.date(1900, 1, 1), max_value=None)
 
             try:
-                fig = px.scatter(x=data_metro_quadrado['ano'],y=data_metro_quadrado['media_metro_quadrado_mean'],
-                        title=f'Evolução do valor do metro quadro em imóveis do bairro: {bairro_escolhido} <br> Tipologia: {tipologia_escolhida}',
-                    )
-                fig.update_layout(
-                    title_x=0.5,           # Define a posição X como 0.5 (centro)
-                    title_xanchor='center', # Garante que o centro do título fique no ponto 0.5
-                    title_font_size=24
-                )
-                fig.update_traces(marker=dict(size=12))
-                st.plotly_chart(fig)
+                inflacao_acumulada = ipca_acumulado(inicio,fim)
+                st.write(f'# IPCA acumulado entre {inicio} e {fim}: {round(100*(inflacao_acumulada),2)}%')
+            except KeyError:
+                st.write('### Selecione um intervalo de datas para verificar indicadores financeiros. Caso nenhum valor de IPCA acumulado seja exibido, não há dados históricos para este período')
 
-                data_metro_quadrado['variacao_anual'] = '-'
-                for i in range(1,len(data_metro_quadrado)):
-                    data_metro_quadrado.iloc[i,4] = round(100*((data_metro_quadrado.iloc[i,3] - data_metro_quadrado.iloc[i-1,3])/data_metro_quadrado.iloc[i-1,3]),2)
+        with con4:
+            tipologia_var = st.selectbox('Escolha a tipologia',sorted(data['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_var')
 
-                data_metro_quadrado = data_metro_quadrado.rename(columns={'ano': 'Ano', 
-                                                                      'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
-                                                                      'media_metro_quadrado_min':'Menor valor de m² (R$/m²)', 
-                                                                      'media_metro_quadrado_mean':'Valor médio de m² (R$/m²)',
-                                                                      'variacao_anual':'Variação anual (%)'
-                                                                      })
+            if (tipologia_var is not None):
+                lista_bairro_var = []
+                for bairro in (data['bairro'].unique()):
+                    resumobairro = variacao_metro_bairro(bairro,tipologia_var)
 
-                ultima_obs = len(data_metro_quadrado)-1
-                variacao = round(100*((data_metro_quadrado.iloc[ultima_obs,3] - data_metro_quadrado.iloc[0,3])/data_metro_quadrado.iloc[0,3]),2)
-                st.write(f'### Variação total observada no período para imóveis no bairo para a tipologia escolhida: {variacao}%')
-                st.dataframe(data_metro_quadrado, hide_index=True)
-            except ValueError:
-                st.write('### Não há resultados contemplados por esta busca**')
+                    if resumobairro.empty or len(resumobairro) < 2:
+                        continue
 
-        else:
-            st.write('### Resultados serão exibidos')        
+                    ultima_obs = len(resumobairro)-1
+                    variacao = round(100*((resumobairro.iloc[ultima_obs,3] - resumobairro.iloc[0,3])/resumobairro.iloc[0,3]),2)
+                    lista_bairro_var.append([bairro,variacao])
 
-    with con1:
-        exibicao_bairro(1)
+                    tabela_resumo = pd.DataFrame(lista_bairro_var, columns=['Bairro','Variação (%)'])
+                    maiores_var = tabela_resumo.sort_values(by='Variação (%)', ascending=False).head(10)
 
-    with con2:
-        exibicao_bairro(2)
-
+                st.dataframe(maiores_var, hide_index=True)
+            else:
+                st.write('### Selecione uma opção de tipologia acima')
 
 if __name__ == "__main__":
     main()
