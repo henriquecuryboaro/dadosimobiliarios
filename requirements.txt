@@ -1,0 +1,6 @@
+pandas
+pathlib
+plotly
+streamlit
+sidrapy
+datetime
