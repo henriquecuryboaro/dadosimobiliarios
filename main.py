@@ -5,9 +5,17 @@ import streamlit as st
 import sidrapy
 import datetime
 
+## Título da página,layout
+st.set_page_config(page_title="Informações do mercado imobiliário do Rio de Janeiro",layout="wide")
+
 #Apontando para arquivo no mesmo diretório do script executado
 DF_PATH = Path(__file__).resolve().parent / 'transacoes_imobiliarias.csv'
-data = pd.read_csv(DF_PATH)
+
+@st.cache_data
+def load_data():
+    return pd.read_csv(DF_PATH)
+
+data = load_data()
 
 #Limpeza de dados
 ##Remoção de vazios na coluna 'bairro'
@@ -25,10 +33,7 @@ data = data.rename(columns={'ano_transação': 'ano', 'média_valor_imóvel':'me
 #Manipulação de dados para obtenção de variáveis de interesse
 data['media_metro_quadrado'] = round((data.iloc[:,10]/data.iloc[:,9]),2)
 
-## Título da página,layout
-st.set_page_config(page_title="Informações do mercado imobiliário do Rio de Janeiro",layout="wide")
-
-
+@st.cache_data
 def variacao_metro_bairro(bairro, tipologia):
     data_metro_quadrado = data[(data['bairro'] == bairro) & (data['principais_tipologias'] == tipologia)].groupby(['ano']).agg(media_metro_quadrado_max=('media_metro_quadrado', 'max'),
                                                             media_metro_quadrado_min=('media_metro_quadrado', 'min'),
@@ -104,7 +109,11 @@ def main():
                     fig.update_layout(
                         title_x=0.5,           # Define a posição X como 0.5 (centro)
                         title_xanchor='center', # Garante que o centro do título fique no ponto 0.5
-                        title_font_size=24
+                        title_font_size=24,
+                        yaxis=dict(title='Valor médio do metro quadrado por transação (R$/m²)'),
+                        xaxis=dict(title='Ano')
+
+
                     )
                     fig.update_traces(marker=dict(size=12))
                     st.plotly_chart(fig)
