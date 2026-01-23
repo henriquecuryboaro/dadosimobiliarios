@@ -43,8 +43,32 @@ def variacao_metro_bairro(bairro, tipologia):
 
     return data_metro_quadrado
 
-# def maiores_variacoes(tipologia_escolhida):
-# tipologia_escolhida = 'Apartamento'
+@st.cache_data
+def ranking_bairro(tipologia,inicio,fim):
+    lista_bairro_var = []
+                
+    for bairro in (data['bairro'].unique()):    
+        resumo = variacao_metro_bairro(bairro,tipologia)
+                        
+        if resumo.empty or len(resumo) < 2:
+            continue
+                        
+        resumo = resumo[(resumo['ano'] >= inicio.year) & (resumo['ano'] <= fim.year)]
+
+        if len(resumo) < 2:
+            continue
+
+        variacao = ((resumo.iloc[-1]['media_metro_quadrado_mean'] - resumo.iloc[0]['media_metro_quadrado_mean'])/resumo.iloc[0]['media_metro_quadrado_mean'])*100
+
+        lista_bairro_var.append([bairro,round(variacao,2)])
+
+    
+    return (
+        pd.DataFrame(lista_bairro_var, columns=['Bairro', 'Variação (%)'])
+        .sort_values('Variação (%)', ascending=False)
+        .head(10)
+    )
+
 
 def main():
     st.write('# Painel de informações do mercado imobiliário na cidade do Rio de Janeiro')
@@ -194,32 +218,15 @@ def main():
         with con4:
             tipologia_var = st.selectbox('Escolha a tipologia',sorted(data['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_var')
 
-            if (tipologia_var is not None):
-                lista_bairro_var = []
-                try:
-                    for bairro in (data['bairro'].unique()):
-                        resumobairro = variacao_metro_bairro(bairro,tipologia_var)
-                        
-                        if resumobairro.empty or len(resumobairro) < 2:
-                            continue
-                        
-                        resumobairro = resumobairro[(resumobairro['ano'] >= inicio.year) & (resumobairro['ano'] <= fim.year)]
-
-                        if resumobairro.empty or len(resumobairro) < 2:
-                            continue
-
-                        ultima_obs = len(resumobairro)-1
-                        variacao = round(100*((resumobairro.iloc[ultima_obs,3] - resumobairro.iloc[0,3])/resumobairro.iloc[0,3]),2)
-                        lista_bairro_var.append([bairro,variacao])
-
-                        tabela_resumo = pd.DataFrame(lista_bairro_var, columns=['Bairro','Variação (%)'])
-                        maiores_var = tabela_resumo.sort_values(by='Variação (%)', ascending=False).head(10)
-
-                    st.dataframe(maiores_var, hide_index=True)
-                except:
-                    st.write('')
-
-            else:
+            try:
+                if tipologia_var and inicio and fim:
+                    maiores_var = ranking_bairro(
+                    tipologia_var,
+                    inicio,
+                    fim
+                )
+                st.dataframe(maiores_var, hide_index=True)
+            except:
                 st.write('### Selecione uma opção de tipologia acima')
 
 if __name__ == "__main__":
