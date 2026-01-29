@@ -43,7 +43,7 @@ data['media_metro_quadrado'] = round((data.iloc[:,10]/data.iloc[:,9]),2)
 def variacao_metro_bairro(bairro, tipologia):
     data_metro_quadrado = data[(data['bairro'] == bairro) & (data['principais_tipologias'] == tipologia)].groupby(['ano']).agg(media_metro_quadrado_max=('media_metro_quadrado', 'max'),
                                                             media_metro_quadrado_min=('media_metro_quadrado', 'min'),
-                                                            media_metro_quadrado_mean=('media_metro_quadrado', 'mean'),
+                                                            media_metro_quadrado_med=('media_metro_quadrado', 'median'),
                                                             transacoes=('obs','count')).reset_index()
 
     data_metro_quadrado.iloc[:,3] = round(data_metro_quadrado.iloc[:,3],2)
@@ -65,7 +65,7 @@ def ranking_bairro(tipologia,inicio,fim):
         if len(resumo) < 2:
             continue
 
-        variacao = ((resumo.iloc[-1]['media_metro_quadrado_mean'] - resumo.iloc[0]['media_metro_quadrado_mean'])/resumo.iloc[0]['media_metro_quadrado_mean'])*100
+        variacao = ((resumo.iloc[-1]['media_metro_quadrado_med'] - resumo.iloc[0]['media_metro_quadrado_med'])/resumo.iloc[0]['media_metro_quadrado_med'])*100
 
         lista_bairro_var.append([bairro,round(variacao,2)])
 
@@ -76,17 +76,60 @@ def ranking_bairro(tipologia,inicio,fim):
         .head(10)
     )
 
-
 @st.cache_data
-def variacao_metro_logradouro(logradouro, tipologia):
-    data_metro_quadrado_lgd = data[(data['logradouro'] == logradouro) & (data['principais_tipologias'] == tipologia)].groupby(['ano']).agg(media_metro_quadrado_max=('media_metro_quadrado', 'max'),
+def variacao_metro_logradouro(logradouro, tipologia,inicio,fim):
+    data_metro_quadrado_lgd = data[(data['logradouro'] == logradouro) & 
+                                   (data['principais_tipologias'] == tipologia) &
+                                   (data['ano'] >= inicio.year) &
+                                   (data['ano'] <= fim.year)].groupby(['ano']).agg(media_metro_quadrado_max=('media_metro_quadrado', 'max'),
                                                             media_metro_quadrado_min=('media_metro_quadrado', 'min'),
-                                                            media_metro_quadrado_mean=('media_metro_quadrado', 'mean'),
+                                                            media_metro_quadrado_med=('media_metro_quadrado', 'median'),
                                                             transacoes=('obs','count')).reset_index()
 
     data_metro_quadrado_lgd.iloc[:,3] = round(data_metro_quadrado_lgd.iloc[:,3],2)
 
     return data_metro_quadrado_lgd
+
+@st.cache_data
+def ipca_acumulado(inicio,fim):
+
+    inicio = str(inicio)[0:4]+str(inicio)[5:7]
+    fim = str(fim)[0:4]+str(fim)[5:7]
+
+    # monta o período no formato exigido pelo SIDRA
+    period = f'{inicio}-{fim}'
+            
+
+    ipca = sidrapy.get_table(
+        table_code='1737',
+        territorial_level='1',     # Brasil
+        ibge_territorial_code='1',
+        variable='63',             # Variação mensal
+        period=period,
+        header='n'
+    )
+
+    df_ipca = pd.DataFrame(ipca)
+
+    df_ipca['V'] = df_ipca['V'].astype(float)
+    df_ipca['decimal'] = (df_ipca['V'])/100
+    ipca_acumulado_periodo = 1
+
+    for i in range(len(df_ipca)):
+        ipca_acumulado_periodo = ipca_acumulado_periodo*(1+(df_ipca.iloc[i,11]))
+
+    return (ipca_acumulado_periodo-1)
+
+
+@st.cache_data
+def var_logradouro(lgd_escolhido, tipologia_lgd,inicio,fim):
+    data_logradouro = variacao_metro_logradouro(lgd_escolhido, tipologia_lgd,inicio,fim)
+
+    if data_logradouro.empty:
+        return pd.DataFrame(data_logradouro)
+
+    else:
+        return pd.DataFrame(data_logradouro)
 
 def main():
     st.write('# Painel de informações do mercado imobiliário na cidade do Rio de Janeiro')
@@ -105,10 +148,8 @@ def main():
         st.write('### É possível analisar estes dados selecionando dois bairros ou duas tipologias ao mesmo  tempo')
         st.write('\n')
         st.markdown('###  **2. Comparação de indicadores**')
-        st.write('### Compara as variações observadas nas transações realizadas com o valor de IPCA para um dado período.')
+        st.write('### Exibe as variações nas negociações de imóveis para um dado logradouro, bem como compara as variações observadas nas transações realizadas com o valor de IPCA para um dado período.')
         st.write('### Esta comparação fornece um indicativo de quais bairros proporcionaram um investimento em imóveis que pode ter oferecido ganho real aos compradores no período avaliado')
-
-
 
     if pagina == 'Evolução de transações em bairros':
 
@@ -122,15 +163,15 @@ def main():
         def exibicao_bairro(i):
             st.markdown("""
                         <style>
-                        /* Targets the text within the selectbox itself */
+                        /* texto na 'selectbox' */
                         .stSelectbox > div[data-baseweb="select"] > div {
                             font-size: 20px; 
                         }
-                        /* Targets the options in the dropdown menu */
+                        /* texto no menu */
                         div[data-baseweb="popover"] div[role="listbox"] div p {
                             font-size: 18px !important;
                         }
-                        /* Targets the label of the selectbox */
+                        /* texto do rótulo da 'selectbox */
                         .stSelectbox > label p {
                             font-size: 22px !important;
                             font-weight: bold;
@@ -145,14 +186,14 @@ def main():
                 data_metro_quadrado = variacao_metro_bairro(bairro_escolhido, tipologia_escolhida)
 
                 try:
-                    fig = px.scatter(x=data_metro_quadrado['ano'],y=data_metro_quadrado['media_metro_quadrado_mean'],
+                    fig = px.scatter(x=data_metro_quadrado['ano'],y=data_metro_quadrado['media_metro_quadrado_med'],
                             title=f'Evolução do valor do metro quadro em imóveis do bairro: {bairro_escolhido} <br> Tipologia: {tipologia_escolhida}',
                         )
                     fig.update_layout(
                         title_x=0.5,           # Define a posição X como 0.5 (centro)
                         title_xanchor='center', # Garante que o centro do título fique no ponto 0.5
                         title_font_size=18,
-                        yaxis=dict(title='Valor médio do metro quadrado por transação (R$/m²)'),
+                        yaxis=dict(title='Mediana dos valores de metro quadrado por transação (R$/m²)'),
                         xaxis=dict(title='Ano')
 
 
@@ -167,7 +208,7 @@ def main():
                     data_metro_quadrado = data_metro_quadrado.rename(columns={'ano': 'Ano', 
                                                                         'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
                                                                         'media_metro_quadrado_min':'Menor valor de m² (R$/m²)', 
-                                                                        'media_metro_quadrado_mean':'Valor médio de m² (R$/m²)',
+                                                                        'media_metro_quadrado_med':'Mediana dos valores de m² (R$/m²)',
                                                                         'transacoes':'Transações realizadas',
                                                                         'variacao_anual':'Variação anual (%)'
                                                                         })
@@ -190,35 +231,6 @@ def main():
     
     if pagina == 'Comparação de indicadores':
         
-        def ipca_acumulado(inicio,fim):
-
-            inicio = str(inicio)[0:4]+str(inicio)[5:7]
-            fim = str(fim)[0:4]+str(fim)[5:7]
-
-            # monta o período no formato exigido pelo SIDRA
-            period = f'{inicio}-{fim}'
-            
-
-            ipca = sidrapy.get_table(
-                table_code='1737',
-                territorial_level='1',     # Brasil
-                ibge_territorial_code='1',
-                variable='63',             # Variação mensal
-                period=period,
-                header='n'
-            )
-
-            df_ipca = pd.DataFrame(ipca)
-
-            df_ipca['V'] = df_ipca['V'].astype(float)
-            df_ipca['decimal'] = (df_ipca['V'])/100
-            ipca_acumulado_periodo = 1
-
-            for i in range(len(df_ipca)):
-                ipca_acumulado_periodo = ipca_acumulado_periodo*(1+(df_ipca.iloc[i,11]))
-
-            return (ipca_acumulado_periodo-1)
-
         col3,col4 = st.columns(2)
         con3 = col3.container(key='comp_3')
         con4 = col4.container(key='comp_4')
@@ -233,14 +245,23 @@ def main():
                 st.write(f'### IPCA acumulado entre {inicio} e {fim}: {round(100*(inflacao_acumulada),2)}%')
             except KeyError:
                 st.write('### Selecione um intervalo de datas para verificar indicadores financeiros. Caso nenhum valor de IPCA acumulado seja exibido, não há dados históricos para este período')
-                st.write(' ')
-                st.write('### Selecione abaixo um bairro e endereço para acompanhar a evolução de valores de transações neste local')
-                bairro_lgd = st.selectbox('Escolha o bairro',sorted(data['bairro'].unique()), index=None, placeholder='Bairros', key=f'bairro_lgd')
-                lgd_bairro_escolhido = data[data['bairro'] == bairro_lgd]
-                lgd_escolhido = st.selectbox('Escolha o logradouro',sorted(lgd_bairro_escolhido['logradouro'].unique()), index=None, placeholder='Logradouros', key=f'lgd_escolhido')
-                tipologia_lgd = st.selectbox('Escolha a tipologia',sorted(lgd_bairro_escolhido['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_escolhida')
-                data_logradouro = variacao_metro_logradouro(lgd_escolhido, tipologia_lgd)
-                st.dataframe(data_logradouro, hide_index=True)
+
+            st.write(' ')
+            st.write('### Selecione abaixo um bairro e endereço para acompanhar a evolução de valores de transações neste local')
+            bairro_lgd = st.selectbox('Escolha o bairro',sorted(data['bairro'].unique()), index=None, placeholder='Bairros', key=f'bairro_lgd')
+            lgd_bairro_escolhido = data[data['bairro'] == bairro_lgd]
+            lgd_escolhido = st.selectbox('Escolha o logradouro',sorted(lgd_bairro_escolhido['logradouro'].unique()), index=None, placeholder='Logradouros', key=f'lgd_escolhido')
+            tipologia_lgd = st.selectbox('Escolha a tipologia',sorted(lgd_bairro_escolhido['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_escolhida')
+
+            var_logradouro_df = var_logradouro(lgd_escolhido, tipologia_lgd,inicio,fim)
+            if (bairro_lgd is not None) and (lgd_escolhido is not None) and (tipologia_lgd is not None):
+                if var_logradouro_df.empty:
+                    st.write('### Se nenhum dado é exibido, nenhuma transação atende os critérios da busca realizada')
+                else:
+                    st.dataframe(var_logradouro_df, hide_index=True)
+
+            else:
+                pass
 
         with con4:
             tipologia_var = st.selectbox('Escolha a tipologia',sorted(data['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_var')
@@ -253,8 +274,10 @@ def main():
                     fim
                 )
                 st.dataframe(maiores_var, hide_index=True)
+                st.write('### Analise criticamente os dados acima : bairros com variações nos valores de transações muito altas entre diferentes anos podem indicar uma região com poucas negociações, e não uma tendência real de valorização.')
             except:
                 st.write('### Selecione uma opção de tipologia acima')
+                
 
 if __name__ == "__main__":
     main()
