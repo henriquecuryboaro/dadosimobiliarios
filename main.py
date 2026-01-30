@@ -8,14 +8,30 @@ import datetime
 ## Título da página,layout
 st.set_page_config(page_title="Informações do mercado imobiliário do Rio de Janeiro",layout="wide")
 
-#Apontando para arquivo no mesmo diretório do script executado
+#Apontando para arquivos no mesmo diretório do script executado
+##Base Data.Rio
 DF_PATH = Path(__file__).resolve().parent / 'transacoes_imobiliarias.csv'
-
 @st.cache_data
 def load_data():
     return pd.read_csv(DF_PATH)
 
 data = load_data()
+
+##Bases de CDI baixadas localmente a partir de acesso pela biblioteca python-bcb (via Google Colab)
+DF_CDI = Path(__file__).resolve().parent / 'CDI.parquet'
+@st.cache_data
+def load_cdiparquet():
+    return pd.read_parquet(DF_CDI)
+
+CDI = load_cdiparquet()
+
+DF_CDI2 = Path(__file__).resolve().parent / 'CDI2.parquet'
+@st.cache_data
+def load_cdi2parquet():
+    return pd.read_parquet(DF_CDI2)
+
+CDI2 = load_cdi2parquet()
+
 
 #Limpeza de dados
 ##Remoção de vazios na coluna 'bairro'
@@ -131,25 +147,52 @@ def var_logradouro(lgd_escolhido, tipologia_lgd,inicio,fim):
     else:
         return pd.DataFrame(data_logradouro)
 
+
+@st.cache_data
+def cdi_acumulado(inicio,fim):
+    df_cdi = pd.concat([CDI,CDI2], ignore_index=True)
+    df_cdi['CDI'] = df_cdi['CDI']/100
+
+    inicio = pd.to_datetime(inicio)
+    fim = pd.to_datetime(fim)
+
+    df_cdi = df_cdi[(df_cdi['Date'] >= inicio) & (df_cdi['Date'] <= fim)]
+    
+    acumulado=1
+    for i in range(len(df_cdi)):
+        acumulado=acumulado*(1+df_cdi.iloc[i,1])
+
+    return round(100*(acumulado-1),2)
+
+
+
 def main():
     st.write('# Painel de informações do mercado imobiliário na cidade do Rio de Janeiro')
-    
+
     st.sidebar.title('Menu de navegação')
     pagina = st.sidebar.selectbox('Esolha a página',['Início','Evolução de transações em bairros', 'Comparação de indicadores'])
     
     if pagina == 'Início':
-        st.write('### Este painel exibe informações referentes a transações reais de imóveis na cidade do Rio de Janeiro, ocorridas entre os anos de 2011 e 2025')
-        st.write('### Os registros analisados provêm de dados públicos que podem ser encontrados no portal da prefeitura do Rio de Janeiro (Data.Rio), além de dados econômicos do IBGE.')
-        st.write('### \n')
-        st.write('\n ')
-        st.markdown('### **As seguintes consultas podem ser realizadas:**')
-        st.markdown('###   **1. Evolução de transações em bairros**')
-        st.write('### Avalia o perfil das transações realizadas ao longo do tempo em um determinado bairro, considerando uma tipologia escolhida.')
-        st.write('### É possível analisar estes dados selecionando dois bairros ou duas tipologias ao mesmo  tempo')
-        st.write('\n')
-        st.markdown('###  **2. Comparação de indicadores**')
-        st.write('### Exibe as variações nas negociações de imóveis para um dado logradouro, bem como compara as variações observadas nas transações realizadas com o valor de IPCA para um dado período.')
-        st.write('### Esta comparação fornece um indicativo de quais bairros proporcionaram um investimento em imóveis que pode ter oferecido ganho real aos compradores no período avaliado')
+        col1,col2 = st.columns(2)
+        con1=col1.container(key='inicio_texto')
+        con2=col2.container(key='inicio_imagem')
+
+        with con1:
+            st.write('### Este painel exibe informações referentes a transações reais de imóveis na cidade do Rio de Janeiro, ocorridas entre os anos de 2011 e 2025')
+            st.write('### Os registros analisados provêm de dados públicos que podem ser encontrados no portal da prefeitura do Rio de Janeiro (Data.Rio), além de dados econômicos do IBGE e do BCB.')
+            st.write('### \n')
+            st.write('\n ')
+            st.markdown('### **As seguintes consultas podem ser realizadas:**')
+            st.markdown('###   **1. Evolução de transações em bairros**')
+            st.write('### Avalia o perfil das transações realizadas ao longo do tempo em um determinado bairro, considerando uma tipologia escolhida.')
+            st.write('### É possível analisar estes dados selecionando dois bairros ou duas tipologias ao mesmo  tempo')
+            st.write('\n')
+            st.markdown('###  **2. Comparação de indicadores**')
+            st.write('### Exibe as variações nas negociações de imóveis para um dado logradouro, bem como compara as variações observadas nas transações realizadas com o valor de IPCA para um dado período.')
+            st.write('### Esta comparação fornece um indicativo de quais bairros proporcionaram um investimento em imóveis que pode ter oferecido ganho real aos compradores no período avaliado')
+
+        with con2:
+            st.image('CentroRJ.jpg')
 
     if pagina == 'Evolução de transações em bairros':
 
@@ -175,7 +218,7 @@ def main():
                         .stSelectbox > label p {
                             font-size: 22px !important;
                             font-weight: bold;
-                        }
+                        }                        
                         </style>
                         """, unsafe_allow_html=True)
 
@@ -243,8 +286,11 @@ def main():
             try:
                 inflacao_acumulada = ipca_acumulado(inicio,fim)
                 st.write(f'### IPCA acumulado entre {inicio} e {fim}: {round(100*(inflacao_acumulada),2)}%')
+                cdi_acumulado_result = cdi_acumulado(inicio,fim)
+                st.write(f'### CDI acumulado entre {inicio} e {fim}: {cdi_acumulado_result}%')
             except KeyError:
-                st.write('### Selecione um intervalo de datas para verificar indicadores financeiros. Caso nenhum valor de IPCA acumulado seja exibido, não há dados históricos para este período')
+                st.write('### Selecione um intervalo de datas para verificar indicadores financeiros. ')
+                st.write('### Caso nenhum valor de IPCA ou CDI acumulado seja exibido, não há dados históricos para este período')
 
             st.write(' ')
             st.write('### Selecione abaixo um bairro e endereço para acompanhar a evolução de valores de transações neste local')
@@ -254,6 +300,12 @@ def main():
             tipologia_lgd = st.selectbox('Escolha a tipologia',sorted(lgd_bairro_escolhido['principais_tipologias'].unique()), index=None, placeholder='Tipologia', key=f'tipo_escolhida')
 
             var_logradouro_df = var_logradouro(lgd_escolhido, tipologia_lgd,inicio,fim)
+            var_logradouro_df = var_logradouro_df.rename(columns={'ano': 'Ano', 
+                                                                        'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
+                                                                        'media_metro_quadrado_min':'Menor valor de m² (R$/m²)', 
+                                                                        'media_metro_quadrado_med':'Mediana dos valores de m² (R$/m²)',
+                                                                        'transacoes':'Transações realizadas'
+                                                                        })
             if (bairro_lgd is not None) and (lgd_escolhido is not None) and (tipologia_lgd is not None):
                 if var_logradouro_df.empty:
                     st.write('### Se nenhum dado é exibido, nenhuma transação atende os critérios da busca realizada')
@@ -276,7 +328,7 @@ def main():
                 st.dataframe(maiores_var, hide_index=True)
                 st.write('### Analise criticamente os dados acima : bairros com variações nos valores de transações muito altas entre diferentes anos podem indicar uma região com poucas negociações, e não uma tendência real de valorização.')
             except:
-                st.write('### Selecione uma opção de tipologia acima')
+                st.write('### Selecione uma opção de tipologia acima para verificar quais foram os bairros com maior variação nos valores do metro quadrado em negociações durante o período escolhido')
                 
 
 if __name__ == "__main__":
