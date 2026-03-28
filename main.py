@@ -246,7 +246,7 @@ def main():
 
                     data_metro_quadrado['variacao_anual'] = '-'
                     for i in range(1,len(data_metro_quadrado)):
-                        data_metro_quadrado.iloc[i,5] = round(100*((data_metro_quadrado.iloc[i,4] - data_metro_quadrado.iloc[i-1,4])/data_metro_quadrado.iloc[i-1,4]),2)
+                        data_metro_quadrado.iloc[i,5] = round(100*((data_metro_quadrado.iloc[i,3] - data_metro_quadrado.iloc[i-1,3])/data_metro_quadrado.iloc[i-1,3]),2)
 
                     data_metro_quadrado = data_metro_quadrado.rename(columns={'ano': 'Ano', 
                                                                         'media_metro_quadrado_max':'Maior valor de m² (R$/m²)', 
